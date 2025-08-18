@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.gradlew build)",
+      "Bash(dir)",
+      "Bash(gradlew.bat assembleDebug:*)",
+      "Bash(java:*)",
+      "Bash(where java)",
+      "Bash(echo $ANDROID_HOME)",
+      "Bash(./gradlew:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(export JAVA_OPTS=\"-Dorg.gradle.java.installations.auto-download=true\")",
+      "Bash(powershell.exe:*)",
+      "Bash(echo $JAVA_HOME)",
+      "Bash(gradlew:*)",
+      "Bash(.gradlew.bat build)",
+      "Bash(where studio64.exe)"
+    ],
+    "deny": []
+  }
+}

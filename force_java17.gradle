@@ -1,0 +1,25 @@
+// Force Java 17 toolchain download
+plugins {
+    id 'base'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+task downloadJava17(type: Exec) {
+    description = 'Download Java 17 using Gradle toolchain'
+    
+    doFirst {
+        println "Attempting to download Java 17 toolchain..."
+    }
+    
+    // This task will trigger Java 17 download
+    commandLine 'java', '-version'
+    
+    doLast {
+        println "Java toolchain should be downloaded now"
+    }
+}
