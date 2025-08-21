@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.bluetoothremote.ui.components.PasswordInputDialog
 import com.example.bluetoothremote.password.PasswordManager
+import com.example.bluetoothremote.bluetooth.BluetoothLeManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,10 +26,34 @@ fun DeviceScanScreen(
     onStartScan: () -> Unit,
     onStopScan: () -> Unit,
     onDeviceConnect: (BluetoothDevice, String, Boolean) -> Unit,
+    connectionState: BluetoothLeManager.ConnectionState = BluetoothLeManager.ConnectionState.DISCONNECTED,
     modifier: Modifier = Modifier
 ) {
     var selectedDevice by remember { mutableStateOf<BluetoothDevice?>(null) }
     var showPasswordDialog by remember { mutableStateOf(false) }
+    var isConnecting by remember { mutableStateOf(false) }
+    
+    // 监听连接状态变化，处理连接结果
+    LaunchedEffect(connectionState, selectedDevice, isConnecting) {
+        if (isConnecting && selectedDevice != null) {
+            when (connectionState) {
+                BluetoothLeManager.ConnectionState.CONNECTED -> {
+                    // 连接成功，关闭对话框
+                    showPasswordDialog = false
+                    selectedDevice = null
+                    isConnecting = false
+                }
+                BluetoothLeManager.ConnectionState.DISCONNECTED -> {
+                    // 连接失败，重置连接状态但保持对话框开启让用户重试
+                    isConnecting = false
+                    // 不关闭对话框，让用户可以重新输入密码
+                }
+                else -> {
+                    // 连接中的其他状态，保持当前状态
+                }
+            }
+        }
+    }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -138,15 +163,16 @@ fun DeviceScanScreen(
     if (showPasswordDialog && selectedDevice != null) {
         PasswordInputDialog(
             device = selectedDevice!!,
-            defaultPassword = passwordManager.getDefaultPassword(),
+            isConnecting = isConnecting,
             onConnect = { password, remember ->
+                isConnecting = true
                 onDeviceConnect(selectedDevice!!, password, remember)
-                showPasswordDialog = false
-                selectedDevice = null
+                // 不立即关闭对话框，等连接结果
             },
             onCancel = {
                 showPasswordDialog = false
                 selectedDevice = null
+                isConnecting = false
             }
         )
     }
@@ -187,9 +213,9 @@ private fun DeviceListItem(
             ) {
                 Text(
                     text = try {
-                        device.name ?: "CMT设备"
+                        device.name ?: "ALLREMOTE设备"
                     } catch (e: SecurityException) {
-                        "CMT设备"
+                        "ALLREMOTE设备"
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium

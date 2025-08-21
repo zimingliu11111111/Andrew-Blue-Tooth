@@ -63,7 +63,7 @@ class BluetoothLeManager(private val context: Context) {
         }
         
         private const val CONNECTION_TIMEOUT = 10000L // 10秒
-        private const val AUTHENTICATION_TIMEOUT = 5000L // 5秒
+        private const val AUTHENTICATION_TIMEOUT = 1000L // 1秒
         private const val RECONNECT_DELAY = 10000L // 10秒
         private const val MAX_RECONNECT_ATTEMPTS = 5
         
@@ -139,15 +139,15 @@ class BluetoothLeManager(private val context: Context) {
             try {
                 val device = result?.device
                 if (device != null) {
-                    // 只添加CMT开头的设备
+                    // 只添加ALLREMOTE开头的设备
                     val deviceName = try {
                         device.name
                     } catch (e: SecurityException) {
                         null
                     }
                     
-                    // 必须能够获取到设备名称且以CMT开头才添加
-                    if (!deviceName.isNullOrEmpty() && deviceName.startsWith("CMT", ignoreCase = true)) {
+                    // 必须能够获取到设备名称且以ALLREMOTE开头才添加
+                    if (!deviceName.isNullOrEmpty() && deviceName.startsWith("ALLREMOTE", ignoreCase = true)) {
                         val currentDevices = _scannedDevices.value.toMutableList()
                         // 避免重复添加同一设备
                         if (!currentDevices.any { it.address == device.address }) {
@@ -189,17 +189,21 @@ class BluetoothLeManager(private val context: Context) {
         
         coroutineScope.launch {
             try {
-                withTimeout(CONNECTION_TIMEOUT) {
-                    bluetoothGatt = device.connectGatt(context, false, gattCallback)
+                bluetoothGatt = device.connectGatt(context, false, gattCallback)
+                
+                // 设置连接超时检测
+                delay(CONNECTION_TIMEOUT)
+                // 如果超时后仍未连接成功，强制断开
+                if (_connectionState.value == ConnectionState.CONNECTING) {
+                    android.util.Log.d("BluetoothLeManager", "连接超时，强制断开")
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                    _errorMessage.value = "连接超时，请检查设备是否在范围内"
+                    bluetoothGatt?.disconnect()
                 }
             } catch (e: SecurityException) {
                 android.util.Log.e("BluetoothLeManager", "连接权限被拒绝", e)
                 _connectionState.value = ConnectionState.DISCONNECTED
                 _errorMessage.value = "蓝牙连接权限被拒绝"
-            } catch (e: TimeoutCancellationException) {
-                _connectionState.value = ConnectionState.DISCONNECTED
-                _errorMessage.value = "连接超时"
-                // 移除自动重连，改为手动操作
             }
         }
     }
@@ -209,26 +213,34 @@ class BluetoothLeManager(private val context: Context) {
             android.util.Log.d("BluetoothLeManager", "连接状态变化: status=$status, newState=$newState")
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    android.util.Log.d("BluetoothLeManager", "BLE已连接，开始服务发现")
-                    coroutineScope.launch {
-                        _connectionState.value = ConnectionState.CONNECTING
-                        delay(1000) // 等待连接稳定
-                        // 优先请求使用 BLE Coded PHY S=8（125 kbps），提高远距离稳定性
-                        try {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                bluetoothGatt?.setPreferredPhy(
-                                    BluetoothDevice.PHY_LE_CODED,
-                                    BluetoothDevice.PHY_LE_CODED,
-                                    BluetoothDevice.PHY_OPTION_S8
-                                )
-                            }
-                        } catch (_: Exception) { }
-                        android.util.Log.d("BluetoothLeManager", "开始发现服务")
-                        bluetoothGatt?.discoverServices()
+                    // 检查连接状态码，只有成功才继续
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        android.util.Log.d("BluetoothLeManager", "BLE连接成功，开始服务发现")
+                        coroutineScope.launch {
+                            _connectionState.value = ConnectionState.CONNECTING
+                            delay(1000) // 等待连接稳定
+                            // 优先请求使用 BLE Coded PHY S=8（125 kbps），提高远距离稳定性
+                            try {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                    bluetoothGatt?.setPreferredPhy(
+                                        BluetoothDevice.PHY_LE_CODED,
+                                        BluetoothDevice.PHY_LE_CODED,
+                                        BluetoothDevice.PHY_OPTION_S8
+                                    )
+                                }
+                            } catch (_: Exception) { }
+                            android.util.Log.d("BluetoothLeManager", "开始发现服务")
+                            bluetoothGatt?.discoverServices()
+                        }
+                    } else {
+                        android.util.Log.d("BluetoothLeManager", "BLE连接失败: status=$status")
+                        _connectionState.value = ConnectionState.DISCONNECTED
+                        _errorMessage.value = "连接失败 (错误代码: $status)"
                     }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    android.util.Log.d("BluetoothLeManager", "BLE已断开连接")
+                    android.util.Log.d("BluetoothLeManager", "BLE已断开连接: status=$status")
+                    authenticationJob?.cancel() // 取消认证超时任务
                     _connectionState.value = ConnectionState.DISCONNECTED
                     // 移除自动重连逻辑 - 只有APP刚启动时才自动连接，其他时候都需要手动操作
                 }
@@ -263,7 +275,7 @@ class BluetoothLeManager(private val context: Context) {
                         }
                     }
                     
-                    // 延迟开始认证，确保通知已设置
+                    // 延迟开始认证，确保通知已设置，并从此刻开始1秒认证倒计时
                     coroutineScope.launch {
                         delay(500)
                         startAuthentication()
@@ -283,12 +295,11 @@ class BluetoothLeManager(private val context: Context) {
                 android.util.Log.d("BluetoothLeManager", "接收到数据: ${data.joinToString(" ") { "0x%02X".format(it) }}")
                 _receivedData.value = data
                 
-                // 处理接收数据 - 不再处理认证，只处理常规数据
+                // 处理接收数据
                 if (data.isNotEmpty()) {
                     val responseCode = data[0].toInt() and 0xFF
                     android.util.Log.d("BluetoothLeManager", "收到数据: 0x${"%02X".format(responseCode)}")
                     
-                    // 只处理断开信号
                     when (responseCode) {
                         0xFF -> {
                             android.util.Log.d("BluetoothLeManager", "收到断开信号 0xFF")
@@ -297,7 +308,8 @@ class BluetoothLeManager(private val context: Context) {
                             }
                         }
                         else -> {
-                            android.util.Log.d("BluetoothLeManager", "收到常规数据: 0x${"%02X".format(responseCode)}")
+                            // 模块不会发送认证响应，所有数据都是正常的遥控数据
+                            android.util.Log.d("BluetoothLeManager", "收到遥控数据: 0x${"%02X".format(responseCode)}")
                         }
                     }
                 }
@@ -323,11 +335,20 @@ class BluetoothLeManager(private val context: Context) {
         val success = writeData(passwordBytes)
         android.util.Log.d("BluetoothLeManager", "认证密码发送${if(success) "成功" else "失败"}")
         
-        // 发送成功后立即认为连接成功，不等待回复
         if (success) {
-            android.util.Log.d("BluetoothLeManager", "认证密码发送成功 - 立即进入连接状态")
-            _connectionState.value = ConnectionState.CONNECTED
-            reconnectAttempts = 0 // 重置重连计数
+            android.util.Log.d("BluetoothLeManager", "认证密码发送成功 - 等待连接状态确认")
+            _connectionState.value = ConnectionState.AUTHENTICATING
+            reconnectAttempts = 0
+            
+            // 设置认证超时 - 如果超时时间内蓝牙还连着，就认为认证成功
+            authenticationJob = coroutineScope.launch {
+                delay(AUTHENTICATION_TIMEOUT)
+                if (_connectionState.value == ConnectionState.AUTHENTICATING) {
+                    // 超时了但蓝牙还连着，说明认证成功（模块没有断开连接）
+                    android.util.Log.d("BluetoothLeManager", "认证超时但连接保持，认证成功")
+                    _connectionState.value = ConnectionState.CONNECTED
+                }
+            }
         } else {
             android.util.Log.d("BluetoothLeManager", "认证密码发送失败 - 断开连接")
             _connectionState.value = ConnectionState.DISCONNECTED

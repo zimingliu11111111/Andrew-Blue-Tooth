@@ -16,11 +16,11 @@ import androidx.compose.ui.window.Dialog
 @Composable
 fun PasswordInputDialog(
     device: BluetoothDevice,
-    defaultPassword: String = "123456",
     onConnect: (password: String, remember: Boolean) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    isConnecting: Boolean = false
 ) {
-    var password by remember { mutableStateOf(defaultPassword) }
+    var password by remember { mutableStateOf("") }
     var rememberPassword by remember { mutableStateOf(true) }
     var showError by remember { mutableStateOf(false) }
     
@@ -91,15 +91,29 @@ fun PasswordInputDialog(
                     
                     Button(
                         onClick = {
-                            if (password.length == 6) {
+                            if (password.length == 6 && !isConnecting) {
                                 onConnect(password, rememberPassword)
-                            } else {
+                            } else if (password.length != 6) {
                                 showError = true
                             }
                         },
+                        enabled = !isConnecting,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("连接")
+                        if (isConnecting) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Text("连接中...")
+                            }
+                        } else {
+                            Text("连接")
+                        }
                     }
                 }
             }

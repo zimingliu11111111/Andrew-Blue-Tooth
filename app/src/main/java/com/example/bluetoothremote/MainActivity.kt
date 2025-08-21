@@ -178,23 +178,12 @@ fun MainScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // 设备管理按钮
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // 修改密码按钮
+                Button(
+                    onClick = { showPasswordChange = true },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Button(
-                        onClick = { showDeviceManagement = true },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("📱 设备管理")
-                    }
-                    Button(
-                        onClick = { showPasswordChange = true },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("🔑 修改密码")
-                    }
+                    Text("🔑 修改密码")
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 
@@ -291,7 +280,8 @@ fun MainScreen(
                         if (remember) {
                             viewModel.saveDevicePassword(device.address, password)
                         }
-                    }
+                    },
+                    connectionState = uiState.connectionState
                 )
                 
                 // 启动时自动连接最近设备

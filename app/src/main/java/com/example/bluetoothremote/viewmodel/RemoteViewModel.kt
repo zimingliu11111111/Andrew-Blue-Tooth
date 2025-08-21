@@ -126,7 +126,6 @@ class RemoteViewModel(
         // 监听连接状态，检测连接失败
         viewModelScope.launch {
             val passwordManager = com.example.bluetoothremote.password.PasswordManager(context)
-            val savedPassword = passwordManager.getDevicePassword(device.address)
             
             // 重置状态标志
             isUserInitiatedDisconnect = false
@@ -154,8 +153,8 @@ class RemoteViewModel(
                         // 设置连接超时检测
                         timeoutJob = launch {
                             kotlinx.coroutines.delay(15000) // 15秒超时
-                            // 连接超时，如果是已保存设备且密码可能过时，显示重试对话框
-                            if (isConnectingInProgress && savedPassword != null && savedPassword == password) {
+                            // 连接超时，直接弹出重试对话框
+                            if (isConnectingInProgress) {
                                 isConnectingInProgress = false
                                 showPasswordRetryDialog(device, password)
                             }
@@ -163,8 +162,8 @@ class RemoteViewModel(
                     }
                     BluetoothLeManager.ConnectionState.DISCONNECTED -> {
                         timeoutJob?.cancel()
-                        // 只有在连接过程中断开且不是用户主动断开时，才视为连接失败
-                        if (isConnectingInProgress && !isUserInitiatedDisconnect && savedPassword != null && savedPassword == password) {
+                        // 连接失败时直接弹出重试对话框（基于蓝牙状态，不再依赖密码比较）
+                        if (isConnectingInProgress && !isUserInitiatedDisconnect) {
                             isConnectingInProgress = false
                             showPasswordRetryDialog(device, password)
                         } else {
@@ -459,6 +458,7 @@ class RemoteViewModel(
                                 copy(
                                     isReconnecting = false,
                                     isRetryAfterFailure = true,
+                                    showPasswordRetryDialog = true, // 保持对话框开启
                                     snackbarMessage = "连接超时，请检查密码或删除设备"
                                 )
                             }
@@ -497,11 +497,12 @@ class RemoteViewModel(
                                         timeoutJob.cancel()
                                         isConnectingInProgress = false
                                         
-                                        // 连接失败，询问是否删除设备
+                                        // 连接失败，保持重试对话框开启，允许用户继续重试
                                         updateUiState {
                                             copy(
                                                 isReconnecting = false,
                                                 isRetryAfterFailure = true,
+                                                showPasswordRetryDialog = true, // 保持对话框开启
                                                 snackbarMessage = "连接失败，请检查密码或删除设备"
                                             )
                                         }
@@ -520,6 +521,7 @@ class RemoteViewModel(
                         copy(
                             isReconnecting = false,
                             isRetryAfterFailure = true,
+                            showPasswordRetryDialog = true, // 保持对话框开启
                             snackbarMessage = "重新连接失败: ${e.message}"
                         )
                     }
