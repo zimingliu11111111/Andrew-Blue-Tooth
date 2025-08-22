@@ -110,13 +110,6 @@ class RemoteViewModel(
                 updateUiState { copy(signalStrength = rssi) }
             }
         }
-        
-        // Listen to battery level
-        viewModelScope.launch {
-            bluetoothManager.batteryLevel.collect { battery ->
-                updateUiState { copy(batteryLevel = battery) }
-            }
-        }
     }
     
     // Start scanning devices
@@ -260,8 +253,12 @@ class RemoteViewModel(
      */
     fun tryAutoConnect() {
         if (!isAppJustStarted) {
+            android.util.Log.d("RemoteViewModel", "非首次启动，跳过自动连接")
             return // 只在应用刚启动时自动连接
         }
+        
+        android.util.Log.d("RemoteViewModel", "开始自动连接流程")
+        isAppJustStarted = false // 立即标记已不是刚启动状态，避免重复调用
         
         viewModelScope.launch {
             try {
@@ -276,14 +273,12 @@ class RemoteViewModel(
                 } else {
                     // 首次使用，没有保存的设备，直接开始扫描
                     android.util.Log.d("RemoteViewModel", "首次使用，直接开始扫描")
-                    isAppJustStarted = false // 标记已不是刚启动状态
                     startScanning()
                 }
             } catch (e: Exception) {
                 // 自动连接失败，静默处理
                 android.util.Log.d("RemoteViewModel", "自动连接失败: ${e.message}")
                 isAutoConnecting = false
-                isAppJustStarted = false
             }
         }
     }
@@ -354,7 +349,6 @@ class RemoteViewModel(
                     android.util.Log.d("RemoteViewModel", "自动连接超时，弹出密码重试对话框")
                     isConnectingInProgress = false
                     isAutoConnecting = false
-                    isAppJustStarted = false // 标记应用已不是刚启动状态
                     showPasswordRetryDialog(device, password)
                 }
             }
@@ -365,7 +359,6 @@ class RemoteViewModel(
                         connectionTimeoutJob?.cancel()
                         isConnectingInProgress = false
                         isAutoConnecting = false
-                        isAppJustStarted = false // 标记应用已不是刚启动状态
                         android.util.Log.d("RemoteViewModel", "自动连接成功")
                         
                         // 连接成功，更新密码和连接时间
@@ -378,7 +371,6 @@ class RemoteViewModel(
                             connectionTimeoutJob?.cancel()
                             isConnectingInProgress = false
                             isAutoConnecting = false
-                            isAppJustStarted = false // 标记应用已不是刚启动状态
                             android.util.Log.d("RemoteViewModel", "自动连接失败，弹出密码重试对话框")
                             showPasswordRetryDialog(device, password)
                             return@collect

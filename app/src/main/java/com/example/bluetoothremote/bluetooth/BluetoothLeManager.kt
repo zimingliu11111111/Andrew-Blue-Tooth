@@ -14,13 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import java.util.*
 import com.example.bluetoothremote.password.PasswordManager
 
-data class DeviceInfo(
-    val manufacturerName: String? = null,
-    val modelNumber: String? = null,
-    val firmwareVersion: String? = null,
-    val hardwareVersion: String? = null
-)
-
 class BluetoothLeManager(private val context: Context) {
     
     private val bluetoothAdapter: BluetoothAdapter? = try {
@@ -54,13 +47,6 @@ class BluetoothLeManager(private val context: Context) {
     private val _reconnectAttemptsFlow = MutableStateFlow(0)
     val reconnectAttemptsFlow: StateFlow<Int> = _reconnectAttemptsFlow
     
-    // 设备信息状态流
-    private val _batteryLevel = MutableStateFlow<Int?>(null)
-    val batteryLevel: StateFlow<Int?> = _batteryLevel
-    
-    private val _deviceInfo = MutableStateFlow<DeviceInfo?>(null)
-    val deviceInfo: StateFlow<DeviceInfo?> = _deviceInfo
-    
     private val _signalStrength = MutableStateFlow<Int?>(null)
     val signalStrength: StateFlow<Int?> = _signalStrength
 
@@ -74,21 +60,13 @@ class BluetoothLeManager(private val context: Context) {
         private val WRITE_CHARACTERISTIC_UUID = UUID.fromString("0000FFE9-0000-1000-8000-00805f9b34fb")
         private val NOTIFY_CHARACTERISTIC_UUID = UUID.fromString("0000FFE4-0000-1000-8000-00805f9b34fb")
         
-        // 标准BLE服务UUID
-        private val BATTERY_SERVICE_UUID = UUID.fromString("0000180F-0000-1000-8000-00805f9b34fb")
-        private val BATTERY_LEVEL_CHARACTERISTIC_UUID = UUID.fromString("00002A19-0000-1000-8000-00805f9b34fb")
-        private val DEVICE_INFO_SERVICE_UUID = UUID.fromString("0000180A-0000-1000-8000-00805f9b34fb")
-        private val MANUFACTURER_NAME_CHARACTERISTIC_UUID = UUID.fromString("00002A29-0000-1000-8000-00805f9b34fb")
-        private val MODEL_NUMBER_CHARACTERISTIC_UUID = UUID.fromString("00002A24-0000-1000-8000-00805f9b34fb")
-        private val FIRMWARE_VERSION_CHARACTERISTIC_UUID = UUID.fromString("00002A26-0000-1000-8000-00805f9b34fb")
-        
         // 密码转换为字节数组的工具方法
         private fun passwordToBytes(password: String): ByteArray {
             return password.toByteArray(Charsets.UTF_8)
         }
         
         private const val CONNECTION_TIMEOUT = 10000L // 10秒
-        private const val AUTHENTICATION_TIMEOUT = 1000L // 1秒
+        private const val AUTHENTICATION_TIMEOUT = 2000L // 2秒
         private const val RECONNECT_DELAY = 10000L // 10秒
         private const val MAX_RECONNECT_ATTEMPTS = 5
         
@@ -164,25 +142,33 @@ class BluetoothLeManager(private val context: Context) {
             try {
                 val device = result?.device
                 if (device != null) {
-                    // 只添加ALLREMOTE开头的设备
+                    // 获取设备名称，允许多次尝试
                     val deviceName = try {
                         device.name
                     } catch (e: SecurityException) {
                         null
                     }
                     
-                    // 必须能够获取到设备名称且以ALLREMOTE开头才添加
-                    if (!deviceName.isNullOrEmpty() && deviceName.startsWith("ALLREMOTE", ignoreCase = true)) {
+                    // 检查是否是目标设备 - 只添加ALLREMOTE开头的设备或已知的设备地址
+                    val shouldAdd = if (!deviceName.isNullOrEmpty()) {
+                        deviceName.startsWith("ALLREMOTE", ignoreCase = true)
+                    } else {
+                        // 如果名称暂时获取不到，检查是否是已知设备
+                        false
+                    }
+                    
+                    if (shouldAdd) {
                         val currentDevices = _scannedDevices.value.toMutableList()
                         // 避免重复添加同一设备
                         if (!currentDevices.any { it.address == device.address }) {
+                            android.util.Log.d("BluetoothLeManager", "发现设备: $deviceName (${device.address})")
                             currentDevices.add(device)
                             _scannedDevices.value = currentDevices
                         }
                     }
                 }
             } catch (e: Exception) {
-                // 完全忽略
+                android.util.Log.d("BluetoothLeManager", "扫描回调异常: ${e.message}")
             }
         }
         
@@ -300,11 +286,15 @@ class BluetoothLeManager(private val context: Context) {
                         }
                     }
                     
-                    // 获取设备信息，然后开始认证
+                    // 延迟开始认证，确保通知已设置
                     coroutineScope.launch {
-                        // 先尝试获取设备信息
-                        tryGetDeviceInfo(gatt)
                         delay(500)
+                        // 获取信号强度
+                        try {
+                            gatt.readRemoteRssi()
+                        } catch (e: Exception) {
+                            // 静默处理失败
+                        }
                         startAuthentication()
                     }
                 } else {
@@ -348,43 +338,13 @@ class BluetoothLeManager(private val context: Context) {
         }
         
         override fun onCharacteristicRead(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
-            // 暂时不处理特征值读取，因为大多数模块不提供有用信息
+            // 特征值读取完成回调
         }
         
         override fun onReadRemoteRssi(gatt: BluetoothGatt?, rssi: Int, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 _signalStrength.value = rssi
             }
-        }
-    }
-    
-    /**
-     * 更新设备信息
-     */
-    private fun updateDeviceInfo(
-        manufacturerName: String? = null,
-        modelNumber: String? = null,
-        firmwareVersion: String? = null,
-        hardwareVersion: String? = null
-    ) {
-        val currentInfo = _deviceInfo.value ?: DeviceInfo()
-        _deviceInfo.value = currentInfo.copy(
-            manufacturerName = manufacturerName ?: currentInfo.manufacturerName,
-            modelNumber = modelNumber ?: currentInfo.modelNumber,
-            firmwareVersion = firmwareVersion ?: currentInfo.firmwareVersion,
-            hardwareVersion = hardwareVersion ?: currentInfo.hardwareVersion
-        )
-    }
-    
-    /**
-     * 尝试获取设备信息（不需要模块主动发送）
-     */
-    private fun tryGetDeviceInfo(gatt: BluetoothGatt) {
-        // 只获取信号强度 - 这是唯一确定可以获取的额外信息
-        try {
-            gatt.readRemoteRssi()
-        } catch (e: Exception) {
-            // 静默处理失败
         }
     }
     
