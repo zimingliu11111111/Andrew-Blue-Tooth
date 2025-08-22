@@ -185,9 +185,8 @@ private fun DeviceListItem(
     device: BluetoothDevice,
     onDeviceClick: () -> Unit
 ) {
-    // 移除别名管理，直接显示原始设备名称
+    // 移除Card的onClick，只保留Button的onClick避免双重触发
     Card(
-        onClick = onDeviceClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -213,9 +212,9 @@ private fun DeviceListItem(
             ) {
                 Text(
                     text = try {
-                        device.name ?: "ALLREMOTE设备"
+                        device.name ?: device.address
                     } catch (e: SecurityException) {
-                        "ALLREMOTE设备"
+                        device.address
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium

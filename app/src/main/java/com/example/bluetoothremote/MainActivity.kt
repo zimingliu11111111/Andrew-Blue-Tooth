@@ -37,23 +37,28 @@ import androidx.lifecycle.lifecycleScope
 
 class MainActivity : ComponentActivity() {
     
+    // 添加权限状态变量
+    private var permissionsGranted by mutableStateOf(false)
+    
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         // 权限结果处理
         val allGranted = permissions.values.all { it }
+        permissionsGranted = allGranted
+        
         if (allGranted) {
-            // 所有蓝牙权限已授予
-            // 权限授予后自动开始扫描
-        } else {
-            // 部分蓝牙权限被拒绝
-            // 权限被拒绝，显示说明
+            // 所有权限都被授予，手动触发重组
+            android.util.Log.d("MainActivity", "所有权限已授予")
         }
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // 初始化权限状态
+        permissionsGranted = hasAllBluetoothPermissions()
         
         // 启动后2秒自动请求蓝牙权限
         lifecycleScope.launch {
@@ -85,7 +90,7 @@ class MainActivity : ComponentActivity() {
                         MainScreen(
                             modifier = Modifier.padding(innerPadding),
                             viewModel = viewModel!!,
-                            hasPermissions = hasAllBluetoothPermissions(),
+                            hasPermissions = permissionsGranted,
                             onRequestPermissions = { requestBluetoothPermissions() }
                         )
                     } else {
@@ -284,33 +289,26 @@ fun MainScreen(
                     connectionState = uiState.connectionState
                 )
                 
-                // 启动时自动连接最近设备
+                // 权限授予后的初始化逻辑
+                val context = LocalContext.current
+                var hasInitialized by remember { mutableStateOf(false) }
                 LaunchedEffect(hasPermissions) {
-                    if (hasPermissions) {
-                        kotlinx.coroutines.delay(500)
-                        // 尝试自动连接最近设备（仅在应用启动时）
-                        viewModel.tryAutoConnect()
-                    }
-                }
-                
-                // 扫描界面自动扫描逻辑：延迟2秒开始，避开弹框和其他界面
-                LaunchedEffect(hasPermissions, uiState.showPasswordRetryDialog, uiState.connectionState, showDeviceManagement, showPasswordChange) {
-                    if (hasPermissions && 
-                        uiState.connectionState == BluetoothLeManager.ConnectionState.DISCONNECTED &&
-                        !uiState.showPasswordRetryDialog &&
-                        !showDeviceManagement &&
-                        !showPasswordChange &&
-                        !uiState.isScanning) {
-                        // 在扫描界面且无弹框时，延迟2秒后自动开始扫描
-                        kotlinx.coroutines.delay(2000)
-                        // 再次检查状态，确保没有变化
-                        if (hasPermissions &&
-                            uiState.connectionState == BluetoothLeManager.ConnectionState.DISCONNECTED &&
-                            !uiState.showPasswordRetryDialog &&
-                            !showDeviceManagement &&
-                            !showPasswordChange &&
-                            !uiState.isScanning) {
-                            viewModel.startScanning()
+                    if (hasPermissions && !hasInitialized) {
+                        hasInitialized = true
+                        kotlinx.coroutines.delay(500) // 等待500ms让界面稳定
+                        
+                        // 检查是否有存储的设备
+                        val passwordManager = com.example.bluetoothremote.password.PasswordManager(context)
+                        val hasStoredDevices = passwordManager.getLastConnectedDevice() != null
+                        
+                        if (hasStoredDevices) {
+                            // 有存储设备，尝试自动连接
+                            viewModel.tryAutoConnect()
+                        } else {
+                            // 首次使用，没有存储设备，直接开始扫描
+                            if (!uiState.isScanning) {
+                                viewModel.startScanning()
+                            }
                         }
                     }
                 }

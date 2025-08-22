@@ -103,6 +103,20 @@ class RemoteViewModel(
                 updateUiState { copy(reconnectAttempt = count) }
             }
         }
+        
+        // Listen to signal strength
+        viewModelScope.launch {
+            bluetoothManager.signalStrength.collect { rssi ->
+                updateUiState { copy(signalStrength = rssi) }
+            }
+        }
+        
+        // Listen to battery level
+        viewModelScope.launch {
+            bluetoothManager.batteryLevel.collect { battery ->
+                updateUiState { copy(batteryLevel = battery) }
+            }
+        }
     }
     
     // Start scanning devices
