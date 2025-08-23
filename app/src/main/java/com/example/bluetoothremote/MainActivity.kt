@@ -11,7 +11,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -19,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.core.content.ContextCompat
 import com.example.bluetoothremote.ui.theme.BluetoothremoteTheme
@@ -266,6 +270,57 @@ fun MainScreen(
                 ) {
                     Text("📱 设备管理")
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // 测试遥控器按钮
+                var showTestRemote by remember { mutableStateOf(false) }
+                
+                if (showTestRemote) {
+                    // 纯净的全屏遥控器界面
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        // 纯净遥控器界面
+                        RemoteControllerView(
+                            isEnabled = true,
+                            onKeyPressed = { key -> 
+                                // 可以在这里添加测试日志
+                                println("按下键: $key")
+                            },
+                            onKeyReleased = { key -> 
+                                println("释放键: $key")
+                            },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp)
+                        )
+                        
+                        // 右上角小返回按钮
+                        Button(
+                            onClick = { showTestRemote = false },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp)
+                                .size(48.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+                            )
+                        ) {
+                            Text("×", fontSize = 18.sp)
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { showTestRemote = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Text("🎮 测试遥控器界面")
+                    }
+                }
+                
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 DeviceScanScreen(

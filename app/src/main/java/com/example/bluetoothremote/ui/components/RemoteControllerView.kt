@@ -21,6 +21,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 
 @Composable
 fun RemoteControllerView(
@@ -30,33 +35,57 @@ fun RemoteControllerView(
     modifier: Modifier = Modifier
 ) {
     val hapticFeedback = LocalHapticFeedback.current
+    var isLightOn by remember { mutableStateOf(false) }
+    var pressedKeys by remember { mutableStateOf(setOf<String>()) }
     
-    Column(
-        modifier = modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        // 十字方向键区域
-        DirectionKeysLayout(
-            isEnabled = isEnabled,
-            onKeyPressed = { key ->
+    Box(modifier = modifier.fillMaxSize()) {
+        // 红色指示灯 - 在左上角
+        IndicatorLight(
+            isOn = isLightOn || pressedKeys.isNotEmpty(),
+            onClick = {
+                isLightOn = !isLightOn
                 hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                onKeyPressed(key)
             },
-            onKeyReleased = onKeyReleased
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp)
         )
         
-        Spacer(modifier = Modifier.height(48.dp))
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // 十字方向键区域
+            DirectionKeysLayout(
+                isEnabled = isEnabled,
+                onKeyPressed = { key ->
+                    pressedKeys = pressedKeys + key
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onKeyPressed(key)
+                },
+                onKeyReleased = { key ->
+                    pressedKeys = pressedKeys - key
+                    onKeyReleased(key)
+                }
+            )
         
-        // 功能键区域
-        FunctionKeysLayout(
-            isEnabled = isEnabled,
-            onKeyPressed = { key ->
-                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                onKeyPressed(key)
-            },
-            onKeyReleased = onKeyReleased
-        )
+            Spacer(modifier = Modifier.height(80.dp))
+            
+            // 功能键区域
+            FunctionKeysLayout(
+                isEnabled = isEnabled,
+                onKeyPressed = { key ->
+                    pressedKeys = pressedKeys + key
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onKeyPressed(key)
+                },
+                onKeyReleased = { key ->
+                    pressedKeys = pressedKeys - key
+                    onKeyReleased(key)
+                }
+            )
+        }
     }
 }
 
@@ -69,57 +98,49 @@ private fun DirectionKeysLayout(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 上键
-        RemoteKeyButton(
+        // 上键 - 三角形
+        TriangleKeyButton(
             key = "K1",
-            icon = Icons.Filled.KeyboardArrowUp,
-            label = "上",
+            direction = TriangleDirection.UP,
             isEnabled = isEnabled,
-            keyColor = MaterialTheme.colorScheme.primary,
             onKeyPressed = onKeyPressed,
             onKeyReleased = onKeyReleased
         )
         
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         
         // 中间行：左键、中间空白、右键
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左键
-            RemoteKeyButton(
+            // 左键 - 三角形
+            TriangleKeyButton(
                 key = "K3",
-                icon = Icons.Filled.KeyboardArrowLeft,
-                label = "左",
+                direction = TriangleDirection.LEFT,
                 isEnabled = isEnabled,
-                keyColor = MaterialTheme.colorScheme.primary,
                 onKeyPressed = onKeyPressed,
                 onKeyReleased = onKeyReleased
             )
             
-            Spacer(modifier = Modifier.width(94.dp)) // 70dp + 12dp + 12dp
+            Spacer(modifier = Modifier.width(88.dp)) // 80dp + 4dp + 4dp
             
-            // 右键
-            RemoteKeyButton(
+            // 右键 - 三角形
+            TriangleKeyButton(
                 key = "K4",
-                icon = Icons.Filled.KeyboardArrowRight,
-                label = "右",
+                direction = TriangleDirection.RIGHT,
                 isEnabled = isEnabled,
-                keyColor = MaterialTheme.colorScheme.primary,
                 onKeyPressed = onKeyPressed,
                 onKeyReleased = onKeyReleased
             )
         }
         
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         
-        // 下键
-        RemoteKeyButton(
+        // 下键 - 三角形
+        TriangleKeyButton(
             key = "K2",
-            icon = Icons.Filled.KeyboardArrowDown,
-            label = "下",
+            direction = TriangleDirection.DOWN,
             isEnabled = isEnabled,
-            keyColor = MaterialTheme.colorScheme.primary,
             onKeyPressed = onKeyPressed,
             onKeyReleased = onKeyReleased
         )
@@ -134,54 +155,46 @@ private fun FunctionKeysLayout(
 ) {
     Column {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(32.dp)
         ) {
-            // K5 功能1
-            RemoteKeyButton(
+            // K5 太阳图标
+            CustomIconButton(
                 key = "K5",
-                icon = Icons.Filled.Star,
-                label = "功能1",
+                iconType = CustomIcon.SUN,
                 isEnabled = isEnabled,
-                keyColor = Color(0xFF4CAF50), // 绿色
                 onKeyPressed = onKeyPressed,
                 onKeyReleased = onKeyReleased
             )
             
-            // K6 功能2
-            RemoteKeyButton(
-                key = "K6",
-                icon = Icons.Filled.Star,
-                label = "功能2",
+            // K6 双三角形
+            CustomIconButton(
+                key = "K6", 
+                iconType = CustomIcon.DOUBLE_TRIANGLE,
                 isEnabled = isEnabled,
-                keyColor = Color(0xFF4CAF50), // 绿色
                 onKeyPressed = onKeyPressed,
                 onKeyReleased = onKeyReleased
             )
         }
         
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(32.dp))
         
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(32.dp)
         ) {
-            // K7 功能3
-            RemoteKeyButton(
+            // K7 房子图标
+            CustomIconButton(
                 key = "K7",
-                icon = Icons.Filled.Settings,
-                label = "功能3",
+                iconType = CustomIcon.HOUSE,
                 isEnabled = isEnabled,
-                keyColor = Color(0xFF4CAF50), // 绿色
                 onKeyPressed = onKeyPressed,
                 onKeyReleased = onKeyReleased
             )
             
-            // K8 功能4
-            RemoteKeyButton(
+            // K8 双圆圈
+            CustomIconButton(
                 key = "K8",
-                icon = Icons.Filled.Settings,
-                label = "功能4",
+                iconType = CustomIcon.DOUBLE_CIRCLE,
                 isEnabled = isEnabled,
-                keyColor = Color(0xFF4CAF50), // 绿色
                 onKeyPressed = onKeyPressed,
                 onKeyReleased = onKeyReleased
             )
@@ -239,7 +252,7 @@ private fun RemoteKeyButton(
     
     Box(
         modifier = modifier
-            .size(70.dp)
+            .size(80.dp)
             .clip(CircleShape)
             .background(buttonColor)
             .clickable(
@@ -264,6 +277,408 @@ private fun RemoteKeyButton(
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium
             )
+        }
+    }
+}
+
+@Composable
+private fun FunctionKeyButton12(
+    key: String,
+    isEnabled: Boolean,
+    onKeyPressed: (String) -> Unit,
+    onKeyReleased: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    
+    // 监听按压交互
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> {
+                    if (!isPressed) {
+                        isPressed = true
+                        onKeyPressed(key)
+                    }
+                }
+                is PressInteraction.Release -> {
+                    if (isPressed) {
+                        isPressed = false
+                        onKeyReleased(key)
+                    }
+                }
+                is PressInteraction.Cancel -> {
+                    if (isPressed) {
+                        isPressed = false
+                        onKeyReleased(key)
+                    }
+                }
+            }
+        }
+    }
+    
+    val buttonColor = when {
+        !isEnabled -> Color.Gray
+        isPressed -> Color(0xFF6B7280).copy(alpha = 0.8f)
+        else -> Color(0xFF6B7280)
+    }
+    
+    val contentColor = if (isEnabled) Color.White else Color.Gray
+    
+    Box(
+        modifier = modifier
+            .size(80.dp)
+            .clip(CircleShape)
+            .background(buttonColor)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = isEnabled
+            ) { },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // 显示 "1" 和 "2" 的组合
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "1",
+                    color = contentColor,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "2", 
+                    color = contentColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.offset(y = (-4).dp)
+                )
+            }
+            Text(
+                text = "菜单",
+                color = contentColor,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+enum class TriangleDirection {
+    UP, DOWN, LEFT, RIGHT
+}
+
+@Composable
+private fun TriangleKeyButton(
+    key: String,
+    direction: TriangleDirection,
+    isEnabled: Boolean,
+    onKeyPressed: (String) -> Unit,
+    onKeyReleased: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    
+    // 监听按压交互
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> {
+                    if (!isPressed) {
+                        isPressed = true
+                        onKeyPressed(key)
+                    }
+                }
+                is PressInteraction.Release -> {
+                    if (isPressed) {
+                        isPressed = false
+                        onKeyReleased(key)
+                    }
+                }
+                is PressInteraction.Cancel -> {
+                    if (isPressed) {
+                        isPressed = false
+                        onKeyReleased(key)
+                    }
+                }
+            }
+        }
+    }
+    
+    val buttonColor = when {
+        !isEnabled -> Color.Gray
+        isPressed -> MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+        else -> MaterialTheme.colorScheme.primary
+    }
+    
+    Box(
+        modifier = modifier
+            .size(80.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(buttonColor)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = isEnabled
+            ) { },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(40.dp)) {
+            val trianglePath = Path()
+            val size = this.size.minDimension
+            val center = Offset(size / 2, size / 2)
+            val radius = size * 0.35f // 更大更饱满的三角形
+            
+            when (direction) {
+                TriangleDirection.UP -> {
+                    trianglePath.moveTo(center.x, center.y - radius)
+                    trianglePath.lineTo(center.x - radius * 0.866f, center.y + radius * 0.5f)
+                    trianglePath.lineTo(center.x + radius * 0.866f, center.y + radius * 0.5f)
+                    trianglePath.close()
+                }
+                TriangleDirection.DOWN -> {
+                    trianglePath.moveTo(center.x, center.y + radius)
+                    trianglePath.lineTo(center.x - radius * 0.866f, center.y - radius * 0.5f)
+                    trianglePath.lineTo(center.x + radius * 0.866f, center.y - radius * 0.5f)
+                    trianglePath.close()
+                }
+                TriangleDirection.LEFT -> {
+                    trianglePath.moveTo(center.x - radius, center.y)
+                    trianglePath.lineTo(center.x + radius * 0.5f, center.y - radius * 0.866f)
+                    trianglePath.lineTo(center.x + radius * 0.5f, center.y + radius * 0.866f)
+                    trianglePath.close()
+                }
+                TriangleDirection.RIGHT -> {
+                    trianglePath.moveTo(center.x + radius, center.y)
+                    trianglePath.lineTo(center.x - radius * 0.5f, center.y - radius * 0.866f)
+                    trianglePath.lineTo(center.x - radius * 0.5f, center.y + radius * 0.866f)
+                    trianglePath.close()
+                }
+            }
+            
+            drawPath(
+                path = trianglePath,
+                color = Color.White // 白色三角形
+            )
+        }
+    }
+}
+
+@Composable
+private fun IndicatorLight(
+    isOn: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val lightColor = if (isOn) {
+        Color(0xFF44FF44) // 亮绿色
+    } else {
+        Color(0xFF333333) // 暗灰色（无颜色状态）
+    }
+    
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(lightColor)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        // 添加一个小的内部亮点来模拟LED效果
+        if (isOn) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFAAFFAA)) // 更亮的绿色中心点
+            )
+        }
+    }
+}
+
+enum class CustomIcon {
+    SUN, DOUBLE_TRIANGLE, HOUSE, DOUBLE_CIRCLE
+}
+
+@Composable
+private fun CustomIconButton(
+    key: String,
+    iconType: CustomIcon,
+    isEnabled: Boolean,
+    onKeyPressed: (String) -> Unit,
+    onKeyReleased: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    
+    // 监听按压交互
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> {
+                    if (!isPressed) {
+                        isPressed = true
+                        onKeyPressed(key)
+                    }
+                }
+                is PressInteraction.Release -> {
+                    if (isPressed) {
+                        isPressed = false
+                        onKeyReleased(key)
+                    }
+                }
+                is PressInteraction.Cancel -> {
+                    if (isPressed) {
+                        isPressed = false
+                        onKeyReleased(key)
+                    }
+                }
+            }
+        }
+    }
+    
+    val buttonColor = when {
+        !isEnabled -> Color.Gray
+        isPressed -> Color(0xFF6B7280).copy(alpha = 0.8f)
+        else -> Color(0xFF6B7280)
+    }
+    
+    val iconColor = if (isEnabled) Color.White else Color.Gray
+    
+    Box(
+        modifier = modifier
+            .size(80.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(buttonColor)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = isEnabled
+            ) { },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(40.dp)) {
+            when (iconType) {
+                CustomIcon.SUN -> {
+                    // 太阳图标 - 保持原始大小
+                    val center = Offset(size.width / 2, size.height / 2)
+                    val radius = size.minDimension * 0.15f
+                    
+                    // 中心圆圈
+                    drawCircle(
+                        color = iconColor,
+                        radius = radius,
+                        center = center
+                    )
+                    
+                    // 太阳光线
+                    val rayLength = size.minDimension * 0.12f
+                    val rayStart = radius + size.minDimension * 0.05f
+                    for (i in 0..7) {
+                        val angle = i * 45f * (kotlin.math.PI / 180f)
+                        val startX = center.x + kotlin.math.cos(angle).toFloat() * rayStart
+                        val startY = center.y + kotlin.math.sin(angle).toFloat() * rayStart
+                        val endX = center.x + kotlin.math.cos(angle).toFloat() * (rayStart + rayLength)
+                        val endY = center.y + kotlin.math.sin(angle).toFloat() * (rayStart + rayLength)
+                        
+                        drawLine(
+                            color = iconColor,
+                            start = Offset(startX, startY),
+                            end = Offset(endX, endY),
+                            strokeWidth = 3.dp.toPx()
+                        )
+                    }
+                }
+                
+                CustomIcon.DOUBLE_TRIANGLE -> {
+                    // 双重叠三角形 - 更大尺寸，左小空心，右大实心
+                    val center = Offset(size.width / 2, size.height / 2)
+                    val smallTriangleSize = size.minDimension * 0.28f
+                    val largeTriangleSize = size.minDimension * 0.35f
+                    
+                    // 第一个三角形（左边小的空心）
+                    val triangle1 = Path().apply {
+                        moveTo(center.x - smallTriangleSize * 0.4f, center.y - smallTriangleSize * 0.5f)
+                        lineTo(center.x + smallTriangleSize * 0.6f, center.y)
+                        lineTo(center.x - smallTriangleSize * 0.4f, center.y + smallTriangleSize * 0.5f)
+                        close()
+                    }
+                    
+                    // 第二个三角形（右边大的实心）
+                    val triangle2 = Path().apply {
+                        moveTo(center.x + largeTriangleSize * 0.05f, center.y - largeTriangleSize * 0.6f)
+                        lineTo(center.x + largeTriangleSize * 1.2f, center.y)
+                        lineTo(center.x + largeTriangleSize * 0.05f, center.y + largeTriangleSize * 0.6f)
+                        close()
+                    }
+                    
+                    // 绘制小三角形（空心）
+                    drawPath(
+                        triangle1, 
+                        iconColor,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx())
+                    )
+                    // 绘制大三角形（实心）
+                    drawPath(triangle2, iconColor)
+                }
+                
+                CustomIcon.HOUSE -> {
+                    // 房屋图标 - 更大尺寸
+                    val center = Offset(size.width / 2, size.height / 2)
+                    val houseSize = size.minDimension * 0.4f  // 从0.3f增加到0.4f
+                    
+                    val housePath = Path().apply {
+                        // 屋顶
+                        moveTo(center.x, center.y - houseSize * 0.6f)  // 屋顶更高
+                        lineTo(center.x - houseSize * 0.6f, center.y)  // 屋顶更宽
+                        lineTo(center.x + houseSize * 0.6f, center.y)
+                        close()
+                        
+                        // 房屋主体
+                        addRect(
+                            androidx.compose.ui.geometry.Rect(
+                                left = center.x - houseSize * 0.5f,    // 房屋更宽
+                                top = center.y,
+                                right = center.x + houseSize * 0.5f,
+                                bottom = center.y + houseSize * 0.6f   // 房屋更高
+                            )
+                        )
+                    }
+                    
+                    drawPath(housePath, iconColor)
+                }
+                
+                CustomIcon.DOUBLE_CIRCLE -> {
+                    // 双重叠圆圈 - 更大尺寸，左小空心，右大实心
+                    val center = Offset(size.width / 2, size.height / 2)
+                    val smallRadius = size.minDimension * 0.18f    // 小圆半径
+                    val largeRadius = size.minDimension * 0.22f    // 大圆半径
+                    val smallOffset = size.minDimension * 0.12f    // 小圆偏移
+                    val largeOffset = size.minDimension * 0.10f    // 大圆偏移
+                    
+                    // 第一个圆圈（左边小的空心）
+                    drawCircle(
+                        color = iconColor,
+                        radius = smallRadius,
+                        center = Offset(center.x - smallOffset, center.y),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx())
+                    )
+                    
+                    // 第二个圆圈（右边大的实心）
+                    drawCircle(
+                        color = iconColor,
+                        radius = largeRadius,
+                        center = Offset(center.x + largeOffset, center.y)
+                    )
+                }
+            }
         }
     }
 }

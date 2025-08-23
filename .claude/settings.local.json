@@ -14,7 +14,8 @@
       "Bash(echo $JAVA_HOME)",
       "Bash(gradlew:*)",
       "Bash(.gradlew.bat build)",
-      "Bash(where studio64.exe)"
+      "Bash(where studio64.exe)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
