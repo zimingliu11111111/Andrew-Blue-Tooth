@@ -163,7 +163,7 @@ class RemoteViewModel(
                             // 连接超时，直接弹出重试对话框
                             if (isConnectingInProgress) {
                                 isConnectingInProgress = false
-                                showPasswordRetryDialog(device, password)
+                                showPasswordFailureDialog(device, password)
                             }
                         }
                     }
@@ -172,7 +172,7 @@ class RemoteViewModel(
                         // 连接失败时直接弹出重试对话框（基于蓝牙状态，不再依赖密码比较）
                         if (isConnectingInProgress && !isUserInitiatedDisconnect) {
                             isConnectingInProgress = false
-                            showPasswordRetryDialog(device, password)
+                            showPasswordFailureDialog(device, password)
                         } else {
                             isConnectingInProgress = false
                         }
@@ -349,7 +349,7 @@ class RemoteViewModel(
                     android.util.Log.d("RemoteViewModel", "自动连接超时，弹出密码重试对话框")
                     isConnectingInProgress = false
                     isAutoConnecting = false
-                    showPasswordRetryDialog(device, password)
+                    showPasswordFailureDialog(device, password)
                 }
             }
             
@@ -372,7 +372,7 @@ class RemoteViewModel(
                             isConnectingInProgress = false
                             isAutoConnecting = false
                             android.util.Log.d("RemoteViewModel", "自动连接失败，弹出密码重试对话框")
-                            showPasswordRetryDialog(device, password)
+                            showPasswordFailureDialog(device, password)
                             return@collect
                         }
                     }
@@ -566,6 +566,20 @@ class RemoteViewModel(
             copy(
                 showPasswordRetryDialog = false,
                 retryDeviceInfo = null,
+                isReconnecting = false,
+                isRetryAfterFailure = false
+            )
+        }
+    }
+    
+    /**
+     * 显示密码重试对话框（内部方法）
+     */
+    private fun showPasswordFailureDialog(device: BluetoothDevice, password: String) {
+        updateUiState {
+            copy(
+                showPasswordRetryDialog = true,
+                retryDeviceInfo = Pair(device, password),
                 isReconnecting = false,
                 isRetryAfterFailure = false
             )

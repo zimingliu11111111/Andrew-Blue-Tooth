@@ -183,7 +183,8 @@ class PasswordManager(context: Context) {
      */
     fun getLastConnectedDevice(): DeviceInfo? {
         val devices = getAllDevicesInfo()
-        return devices.firstOrNull { it.lastConnectTime > 0 }
+        // 只返回有有效密码且有连接时间的设备
+        return devices.firstOrNull { it.lastConnectTime > 0 && it.password.isNotEmpty() }
     }
     
     /**

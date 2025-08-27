@@ -54,6 +54,10 @@ class BluetoothLeManager(private val context: Context) {
     private var authenticationJob: Job? = null
     private var reconnectJob: Job? = null
     
+    // 认证状态跟踪
+    private var authenticationStartTime: Long = 0
+    private var isWaitingForAuthResponse: Boolean = false
+    
     // BLE服务和特征值UUID
     companion object {
         private val SERVICE_UUID = UUID.fromString("0000FFE0-0000-1000-8000-00805f9b34fb")
@@ -66,7 +70,8 @@ class BluetoothLeManager(private val context: Context) {
         }
         
         private const val CONNECTION_TIMEOUT = 10000L // 10秒
-        private const val AUTHENTICATION_TIMEOUT = 2000L // 2秒
+        private const val AUTHENTICATION_TIMEOUT = 5000L // 5秒认证超时
+        private const val AUTH_VERIFICATION_TIMEOUT = 3000L // 3秒验证超时
         private const val RECONNECT_DELAY = 10000L // 10秒
         private const val MAX_RECONNECT_ATTEMPTS = 5
         
@@ -252,6 +257,14 @@ class BluetoothLeManager(private val context: Context) {
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     android.util.Log.d("BluetoothLeManager", "BLE已断开连接: status=$status")
                     authenticationJob?.cancel() // 取消认证超时任务
+                    
+                    // 如果是在认证期间断开，很可能是密码错误
+                    if (isWaitingForAuthResponse) {
+                        android.util.Log.d("BluetoothLeManager", "认证期间断开连接，可能是密码错误")
+                        isWaitingForAuthResponse = false
+                        _errorMessage.value = "认证失败，密码可能不正确"
+                    }
+                    
                     _connectionState.value = ConnectionState.DISCONNECTED
                     // 移除自动重连逻辑 - 只有APP刚启动时才自动连接，其他时候都需要手动操作
                 }
@@ -365,6 +378,7 @@ class BluetoothLeManager(private val context: Context) {
         if (success) {
             android.util.Log.d("BluetoothLeManager", "认证密码发送成功 - 等待连接状态确认")
             _connectionState.value = ConnectionState.AUTHENTICATING
+            isWaitingForAuthResponse = true // 标记正在等待认证响应
             reconnectAttempts = 0
             
             // 设置认证超时 - 如果超时时间内蓝牙还连着，就认为认证成功
@@ -373,6 +387,8 @@ class BluetoothLeManager(private val context: Context) {
                 if (_connectionState.value == ConnectionState.AUTHENTICATING) {
                     // 超时了但蓝牙还连着，说明认证成功（模块没有断开连接）
                     android.util.Log.d("BluetoothLeManager", "认证超时但连接保持，认证成功")
+                    isWaitingForAuthResponse = false
+                    authenticationStartTime = 0
                     _connectionState.value = ConnectionState.CONNECTED
                 }
             }
@@ -437,6 +453,10 @@ class BluetoothLeManager(private val context: Context) {
         bluetoothGatt = null
         writeCharacteristic = null
         notifyCharacteristic = null
+        
+        // 重置认证状态
+        isWaitingForAuthResponse = false
+        authenticationStartTime = 0
         
         _connectionState.value = ConnectionState.DISCONNECTED
         reconnectAttempts = 0
@@ -509,11 +529,11 @@ class BluetoothLeManager(private val context: Context) {
         // 执行密码修改
         val success = changePassword(newPassword)
         if (success) {
-            // 安全措施：修改密码成功后，清除本地保存的密码
-            // 强制下次连接时重新输入新密码
-            passwordManager.removeDevicePassword(targetAddress)
-            android.util.Log.d("BluetoothLeManager", "密码修改成功，已清除本地密码缓存，下次连接需重新输入")
-            _errorMessage.value = "密码修改成功，下次连接请输入新密码"
+            // 安全措施：修改密码成功后，彻底清除设备信息
+            // 强制下次连接时重新扫描和输入新密码
+            passwordManager.resetDevicePassword(targetAddress)
+            android.util.Log.d("BluetoothLeManager", "密码修改成功，已彻底清除设备信息，下次需重新扫描连接")
+            _errorMessage.value = "密码修改成功，设备已移除，请重新扫描连接"
         } else {
             _errorMessage.value = "密码修改失败"
         }
